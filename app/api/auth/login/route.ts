@@ -1,26 +1,16 @@
 // app/api/auth/login/route.ts
 import { NextResponse } from "next/server";
-import { sql } from "@/lib/db";
-import { comparePassword, createToken } from "@/lib/auth";
 
-// Force edge runtime untuk avoid module caching issues
-export const runtime = "edge";
+// Use node runtime for bcryptjs compatibility
+export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
-    // Parse body
-    let body: any = {};
-    try {
-      const text = await request.text();
-      console.log("Login body:", text.substring(0, 100));
+    // Dynamic import to avoid build issues
+    const { sql } = await import("@/lib/db");
+    const { comparePassword, createToken } = await import("@/lib/auth");
 
-      if (text) {
-        body = JSON.parse(text);
-      }
-    } catch (parseError) {
-      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-    }
-
+    const body = await request.json();
     const { email, password } = body;
 
     if (!email || !password) {
@@ -46,8 +36,6 @@ export async function POST(request: Request) {
     }
 
     const user = users[0];
-
-    // Compare password
     const valid = await comparePassword(password, user.password);
 
     if (!valid) {
@@ -57,7 +45,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create token
     const token = await createToken({
       id: user.id,
       email: user.email,
