@@ -3,9 +3,10 @@ import { NextResponse } from "next/server";
 import { verifyToken } from "@/lib/auth";
 import { sql } from "@/lib/db";
 
+export const runtime = "edge";
+
 export async function GET(request: Request) {
   try {
-    // Ambil token dari cookie
     const cookieHeader = request.headers.get("cookie");
     const token = cookieHeader?.match(/token=([^;]+)/)?.[1];
 

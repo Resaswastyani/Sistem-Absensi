@@ -1,57 +1,24 @@
 // app/api/auth/login/route.ts
 import { NextResponse } from "next/server";
+import { sql } from "@/lib/db";
+import { comparePassword, createToken } from "@/lib/auth";
 
-// Import dengan try-catch untuk debug
-let sql: any;
-let comparePassword: any;
-let createToken: any;
-
-try {
-  const dbModule = require("@/lib/db");
-  sql = dbModule.sql;
-} catch (e) {
-  console.error("Failed to import db:", e);
-}
-
-try {
-  const authModule = require("@/lib/auth");
-  comparePassword = authModule.comparePassword;
-  createToken = authModule.createToken;
-} catch (e) {
-  console.error("Failed to import auth:", e);
-}
+// Force edge runtime untuk avoid module caching issues
+export const runtime = "edge";
 
 export async function POST(request: Request) {
   try {
-    // Check imports
-    if (!sql) {
-      return NextResponse.json(
-        { error: "Database module not loaded" },
-        { status: 500 },
-      );
-    }
-    if (!comparePassword || !createToken) {
-      return NextResponse.json(
-        { error: "Auth module not loaded" },
-        { status: 500 },
-      );
-    }
-
-    // Parse body dengan extra care
+    // Parse body
     let body: any = {};
     try {
       const text = await request.text();
-      console.log("Request body text:", text);
+      console.log("Login body:", text.substring(0, 100));
 
       if (text) {
         body = JSON.parse(text);
       }
     } catch (parseError) {
-      console.error("Parse error:", parseError);
-      return NextResponse.json(
-        { error: "Invalid JSON: " + String(parseError) },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
     const { email, password } = body;
@@ -63,26 +30,13 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log("Login attempt for:", email);
-
     // Query database
-    let users: any[] = [];
-    try {
-      users = await sql`
-        SELECT id, name, email, password, role, nip, jabatan, departemen, status, phone, alamat
-        FROM users 
-        WHERE email = ${email} 
-        LIMIT 1
-      `;
-    } catch (dbError: any) {
-      console.error("Database query error:", dbError);
-      return NextResponse.json(
-        { error: "DB Error: " + String(dbError.message || dbError) },
-        { status: 500 },
-      );
-    }
-
-    console.log("Users found:", users.length);
+    const users = await sql`
+      SELECT id, name, email, password, role, nip, jabatan, departemen, status, phone, alamat
+      FROM users 
+      WHERE email = ${email} 
+      LIMIT 1
+    `;
 
     if (users.length === 0) {
       return NextResponse.json(
@@ -94,18 +48,7 @@ export async function POST(request: Request) {
     const user = users[0];
 
     // Compare password
-    let valid = false;
-    try {
-      valid = await comparePassword(password, user.password);
-    } catch (pwError) {
-      console.error("Password compare error:", pwError);
-      return NextResponse.json(
-        { error: "Password error: " + String(pwError) },
-        { status: 500 },
-      );
-    }
-
-    console.log("Password valid:", valid);
+    const valid = await comparePassword(password, user.password);
 
     if (!valid) {
       return NextResponse.json(
@@ -115,21 +58,12 @@ export async function POST(request: Request) {
     }
 
     // Create token
-    let token: string;
-    try {
-      token = await createToken({
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        name: user.name,
-      });
-    } catch (tokenError) {
-      console.error("Token creation error:", tokenError);
-      return NextResponse.json(
-        { error: "Token error: " + String(tokenError) },
-        { status: 500 },
-      );
-    }
+    const token = await createToken({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      name: user.name,
+    });
 
     const response = NextResponse.json({
       success: true,
@@ -157,7 +91,7 @@ export async function POST(request: Request) {
 
     return response;
   } catch (error: any) {
-    console.error("Unhandled login error:", error);
+    console.error("Login error:", error);
     return NextResponse.json(
       { error: "Server error: " + String(error.message || error) },
       { status: 500 },

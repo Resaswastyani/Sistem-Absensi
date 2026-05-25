@@ -1,15 +1,17 @@
 // lib/auth.ts
 import { SignJWT, jwtVerify } from "jose";
-import bcrypt from "bcryptjs";
+import bcryptjs from "bcryptjs";
 
-const secret = new TextEncoder().encode(process.env.JWT_SECRET!);
+const secret = new TextEncoder().encode(
+  process.env.JWT_SECRET || "default-secret",
+);
 
 export async function hashPassword(password: string) {
-  return bcrypt.hash(password, 10);
+  return bcryptjs.hash(password, 10);
 }
 
 export async function comparePassword(password: string, hash: string) {
-  return bcrypt.compare(password, hash);
+  return bcryptjs.compare(password, hash);
 }
 
 export async function createToken(payload: Record<string, unknown>) {
