@@ -1,8 +1,18 @@
 // lib/db.ts
 import { neon } from "@neondatabase/serverless";
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is not defined");
+const connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  throw new Error("DATABASE_URL is not defined in environment variables");
 }
 
-export const sql = neon(process.env.DATABASE_URL);
+// Log untuk debug (hanya di development)
+if (process.env.NODE_ENV !== "production") {
+  console.log(
+    "Database URL configured:",
+    connectionString.replace(/:.*@/, ":****@"),
+  );
+}
+
+export const sql = neon(connectionString);
