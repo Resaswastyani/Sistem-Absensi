@@ -52,10 +52,18 @@ export function useAttendance() {
 
   const fetchToday = useCallback(async () => {
     try {
-      // Use query param instead of /today subpath to avoid route conflict
-      const res = await fetch("/api/attendance?today=true", {
+      // Coba /api/attendance/today dulu
+      let res = await fetch("/api/attendance/today", {
         credentials: "include",
       });
+
+      // Jika 404, fallback ke /api/attendance?today=true
+      if (res.status === 404) {
+        res = await fetch("/api/attendance?today=true", {
+          credentials: "include",
+        });
+      }
+
       if (res.ok) {
         const data = await res.json();
         setTodayAttendance(data.attendance || null);

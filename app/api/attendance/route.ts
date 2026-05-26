@@ -1,15 +1,46 @@
 // app/api/attendance/route.ts
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { verifyToken } from "@/lib/auth";
 import { sql } from "@/lib/db";
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const date = searchParams.get("date");
-  const userId = searchParams.get("userId");
-  const startDate = searchParams.get("startDate");
-  const endDate = searchParams.get("endDate");
+export const runtime = "nodejs";
 
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const date = searchParams.get("date");
+    const userId = searchParams.get("userId");
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
+    const today = searchParams.get("today");
+
+    // Jika ?today=true, ambil attendance hari ini untuk user yang login
+    if (today === "true") {
+      const cookieStore = await cookies();
+      const token = cookieStore.get("token")?.value;
+
+      if (!token) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
+      const payload = await verifyToken(token);
+      if (!payload || !payload.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
+      const todayDate = new Date().toISOString().split("T")[0];
+      const rows = await sql`
+        SELECT a.*, u.name as employee_name, u.email as employee_email
+        FROM attendance a
+        JOIN users u ON a.user_id = u.id
+        WHERE a.user_id = ${payload.id} AND a.date = ${todayDate}
+        LIMIT 1
+      `;
+
+      return NextResponse.json({ attendance: rows[0] || null });
+    }
+
     let query;
     if (date) {
       query = sql`
@@ -45,9 +76,11 @@ export async function GET(request: Request) {
         LIMIT 100
       `;
     }
+
     const attendance = await query;
     return NextResponse.json({ attendance });
-  } catch (error) {
+  } catch (error: any) {
+    console.error("[ATTENDANCE GET] Error:", error);
     return NextResponse.json(
       { error: "Gagal mengambil data absensi" },
       { status: 500 },
@@ -69,7 +102,6 @@ export async function POST(request: Request) {
       notes,
     } = body;
 
-    // Upsert logic: if exists for user+date, update; else insert
     const existing = await sql`
       SELECT id FROM attendance WHERE user_id = ${user_id} AND date = ${date} LIMIT 1
     `;
@@ -95,7 +127,8 @@ export async function POST(request: Request) {
       `;
       return NextResponse.json({ attendance: result[0] }, { status: 201 });
     }
-  } catch (error) {
+  } catch (error: any) {
+    console.error("[ATTENDANCE POST] Error:", error);
     return NextResponse.json(
       { error: "Gagal menyimpan absensi" },
       { status: 500 },
