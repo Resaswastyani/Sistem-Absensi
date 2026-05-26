@@ -1,3 +1,4 @@
+// hooks/useSettings.ts
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -19,13 +20,24 @@ export function useSettings() {
 
   const fetchSettings = useCallback(async () => {
     try {
+      setLoading(true);
       const res = await fetch("/api/settings", { credentials: "include" });
-      if (res.ok) {
-        const data = await res.json();
-        setSettings(data.setting);
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        console.error("Failed to fetch settings:", res.status, errData);
+        setSettings(null);
+        return;
       }
+
+      const data = await res.json();
+
+      // Handle both { settings: ... } and { setting: ... } for backward compat
+      const settingsData = data.settings || data.setting || null;
+      setSettings(settingsData);
     } catch (error) {
       console.error("Failed to fetch settings:", error);
+      setSettings(null);
     } finally {
       setLoading(false);
     }
@@ -38,8 +50,18 @@ export function useSettings() {
       body: JSON.stringify(data),
       credentials: "include",
     });
-    if (res.ok) fetchSettings();
-    return res.ok;
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(
+        errData.error || `Failed to update settings (${res.status})`,
+      );
+    }
+
+    const result = await res.json();
+    const settingsData = result.settings || result.setting || null;
+    setSettings(settingsData);
+    return settingsData;
   };
 
   useEffect(() => {
