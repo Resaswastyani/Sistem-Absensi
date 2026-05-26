@@ -6,7 +6,6 @@ import { sql } from "@/lib/db";
 
 export async function GET(request: Request) {
   try {
-    // PERBAIKAN: await cookies() karena return Promise
     const cookieStore = await cookies();
     const token = cookieStore.get("token")?.value;
 

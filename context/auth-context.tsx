@@ -37,27 +37,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  useEffect(() => {
-    fetchUser();
-  }, []);
-
   const fetchUser = async () => {
     try {
+      setLoading(true);
       const res = await fetch("/api/auth/me", {
         credentials: "include",
         cache: "no-store",
         headers: {
-          "Cache-Control": "no-cache",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
         },
       });
 
       if (res.ok) {
         const data = await res.json();
         setUser(data.user);
-      } else if (res.status === 401 || res.status === 404) {
-        setUser(null);
       } else {
-        console.error("Auth check failed with status:", res.status);
         setUser(null);
       }
     } catch (error) {
@@ -68,10 +63,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = async (email: string, password: string) => {
-    // Clear any existing state first
-    setUser(null);
+  useEffect(() => {
+    fetchUser();
+  }, []);
 
+  const login = async (email: string, password: string) => {
+    setUser(null);
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -80,13 +77,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     const data = await res.json();
-
     if (!res.ok) {
       throw new Error(data.error || "Login gagal");
     }
 
     setUser(data.user);
-
     if (data.user.role === "admin") {
       router.push("/admin");
     } else {
@@ -103,9 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error("Logout error:", error);
     } finally {
-      // Always clear local state even if API fails
       setUser(null);
-      // Force reload to clear all cached data
       window.location.href = "/";
     }
   };

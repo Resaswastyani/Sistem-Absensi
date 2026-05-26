@@ -15,7 +15,7 @@ import { useSettings } from "@/hooks/useSettings";
 export default function Page() {
   const { user } = useAuth();
   const { todayAttendance, fetchToday, addAttendance } = useAttendance();
-  const { settings } = useSettings();
+  const { settings, loading: settingsLoading } = useSettings();
   const [showCameraModal, setShowCameraModal] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<any>(null);
   const [locationError, setLocationError] = useState("");
@@ -25,8 +25,10 @@ export default function Page() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetchToday();
-  }, [fetchToday]);
+    if (user) {
+      fetchToday();
+    }
+  }, [user, fetchToday]);
 
   const getLocationDistance = (
     lat1: number,
@@ -62,20 +64,36 @@ export default function Page() {
         const { latitude, longitude } = position.coords;
         setCurrentLocation({ latitude, longitude });
 
-        if (settings) {
-          const distance = getLocationDistance(
-            latitude,
-            longitude,
-            Number(settings.latitude),
-            Number(settings.longitude),
+        // GUARD: pastikan settings sudah loaded dan valid
+        if (!settings || settingsLoading) {
+          setLocationError("Pengaturan lokasi belum dimuat, coba lagi");
+          setLoading(false);
+          return;
+        }
+
+        const officeLat = Number(settings.latitude);
+        const officeLng = Number(settings.longitude);
+        const officeRadius = Number(settings.radius);
+
+        if (isNaN(officeLat) || isNaN(officeLng) || isNaN(officeRadius)) {
+          setLocationError("Koordinat kantor tidak valid");
+          setLoading(false);
+          return;
+        }
+
+        const distance = getLocationDistance(
+          latitude,
+          longitude,
+          officeLat,
+          officeLng,
+        );
+
+        if (distance > officeRadius) {
+          setLocationError(
+            `Anda berada ${Math.round(distance)}m dari kantor. Radius: ${officeRadius}m`,
           );
-          if (distance > Number(settings.radius)) {
-            setLocationError(
-              `Anda berada ${Math.round(distance)}m dari kantor. Radius: ${settings.radius}m`,
-            );
-            setLoading(false);
-            return;
-          }
+          setLoading(false);
+          return;
         }
 
         setShowCameraModal(true);
@@ -124,6 +142,7 @@ export default function Page() {
     fetchToday();
   };
 
+  // Loading state saat auth atau settings belum siap
   if (!user) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -239,7 +258,7 @@ export default function Page() {
                         setAttendanceMode("checkin");
                         handleGetLocation();
                       }}
-                      disabled={loading}
+                      disabled={loading || settingsLoading}
                       className="w-full flex items-center justify-center gap-2"
                     >
                       <Camera size={20} />{" "}
@@ -253,7 +272,7 @@ export default function Page() {
                           setAttendanceMode("checkout");
                           handleGetLocation();
                         }}
-                        disabled={loading}
+                        disabled={loading || settingsLoading}
                         variant="outline"
                         className="w-full flex items-center justify-center gap-2"
                       >
@@ -278,11 +297,15 @@ export default function Page() {
                     </p>
                     <p className="text-xs text-muted-foreground mt-2">
                       Koordinat:{" "}
-                      {Number(settings?.latitude || -7.7956).toFixed(4)},{" "}
-                      {Number(settings?.longitude || 110.4038).toFixed(4)}
+                      {settings
+                        ? `${Number(settings.latitude || -7.7956).toFixed(4)}, ${Number(settings.longitude || 110.4038).toFixed(4)}`
+                        : "Memuat..."}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Radius: {settings?.radius || 100}m
+                      Radius:{" "}
+                      {settings
+                        ? `${Number(settings.radius || 100)}m`
+                        : "Memuat..."}
                     </p>
                   </div>
                   <div className="p-4 rounded-lg bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-900/50">
