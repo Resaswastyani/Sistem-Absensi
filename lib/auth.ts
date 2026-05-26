@@ -3,7 +3,7 @@ import { SignJWT, jwtVerify } from "jose";
 import bcryptjs from "bcryptjs";
 
 const secret = new TextEncoder().encode(
-  process.env.JWT_SECRET || "default-secret",
+  process.env.JWT_SECRET || "stmik-el-rahma-absensi-secret-key-2026",
 );
 
 export async function hashPassword(password: string) {

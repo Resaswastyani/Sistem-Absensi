@@ -37,30 +37,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  // useEffect(() => {
-  //   fetchUser();
-  // }, []);
+  useEffect(() => {
+    fetchUser();
+  }, []);
 
-  // const fetchUser = async () => {
-  //   try {
-  //     const res = await fetch("/api/auth/me", {
-  //       credentials: "include",
-  //       cache: "no-store",
-  //     });
+  const fetchUser = async () => {
+    try {
+      const res = await fetch("/api/auth/me", {
+        credentials: "include",
+        cache: "no-store",
+      });
 
-  //     if (res.ok) {
-  //       const data = await res.json();
-  //       setUser(data.user);
-  //     } else {
-  //       setUser(null);
-  //     }
-  //   } catch (error) {
-  //     console.error("Auth check failed:", error);
-  //     setUser(null);
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
+      if (res.ok) {
+        const data = await res.json();
+        setUser(data.user);
+      } else {
+        setUser(null);
+      }
+    } catch (error) {
+      console.error("Auth check failed:", error);
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const login = async (email: string, password: string) => {
     const res = await fetch("/api/auth/login", {
