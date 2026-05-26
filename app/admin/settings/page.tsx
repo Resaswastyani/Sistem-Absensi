@@ -1,3 +1,4 @@
+// app/admin/settings/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -29,9 +30,9 @@ export default function SettingsPage() {
     if (settings) {
       setFormData({
         name: settings.name,
-        latitude: settings.latitude,
-        longitude: settings.longitude,
-        radius: settings.radius,
+        latitude: Number(settings.latitude),
+        longitude: Number(settings.longitude),
+        radius: Number(settings.radius),
         address: settings.address,
         start_time: settings.start_time,
         end_time: settings.end_time,
@@ -272,7 +273,7 @@ export default function SettingsPage() {
                     Latitude
                   </p>
                   <p className="text-lg font-mono font-semibold text-foreground dark:text-foreground">
-                    {settings.latitude.toFixed(7)}
+                    {Number(settings.latitude).toFixed(7)}
                   </p>
                 </div>
                 <div>
@@ -280,7 +281,7 @@ export default function SettingsPage() {
                     Longitude
                   </p>
                   <p className="text-lg font-mono font-semibold text-foreground dark:text-foreground">
-                    {settings.longitude.toFixed(7)}
+                    {Number(settings.longitude).toFixed(7)}
                   </p>
                 </div>
                 <div>

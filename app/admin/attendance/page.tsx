@@ -1,285 +1,336 @@
+// app/attendance/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { Topbar } from "@/components/topbar";
-import {
-  DarkCard,
-  DarkButton,
-  DarkInput,
-  DarkSelect,
-  DarkTable,
-  DarkTableHead,
-  DarkTableBody,
-  DarkTableRow,
-  DarkBadge,
-} from "@/components/dark-mode-wrapper";
-import { Search, Download, Calendar } from "lucide-react";
+import { FaceDetectionCamera } from "@/components/face-detection-camera";
+import { MobileAttendanceView } from "@/components/mobile-attendance-view";
+import { DarkCard, DarkButton } from "@/components/dark-mode-wrapper";
+import { MapPin, Clock, CheckCircle, AlertCircle, Camera } from "lucide-react";
+import { useAuth } from "@/context/auth-context";
+import { useAttendance } from "@/hooks/useAttendance";
+import { useSettings } from "@/hooks/useSettings";
 
 export default function Page() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [filterDate, setFilterDate] = useState(
-    new Date().toISOString().split("T")[0],
-  );
-  const [attendanceData, setAttendanceData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+  const { todayAttendance, fetchToday, addAttendance } = useAttendance();
+  const { settings } = useSettings();
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState<any>(null);
+  const [locationError, setLocationError] = useState("");
+  const [attendanceMode, setAttendanceMode] = useState<
+    "checkin" | "checkout" | null
+  >(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetchAttendance();
-  }, [filterDate]);
+    fetchToday();
+  }, [fetchToday]);
 
-  const fetchAttendance = async () => {
+  const getLocationDistance = (
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ) => {
+    const R = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c * 1000;
+  };
+
+  const handleGetLocation = () => {
     setLoading(true);
-    try {
-      const res = await fetch(`/api/attendance?date=${filterDate}`, {
-        credentials: "include",
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAttendanceData(
-          data.attendance.map((a: any) => ({
-            id: a.id,
-            employeeName: a.employee_name,
-            employeeEmail: a.employee_email,
-            checkInTime: a.check_in_time,
-            checkOutTime: a.check_out_time,
-            status: a.status,
-            location: a.location,
-          })),
-        );
-      }
-    } catch (error) {
-      console.error("Failed to fetch attendance:", error);
-    } finally {
+    setLocationError("");
+
+    if (!navigator.geolocation) {
+      setLocationError("Geolocation tidak didukung di browser Anda");
       setLoading(false);
+      return;
     }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setCurrentLocation({ latitude, longitude });
+
+        if (settings) {
+          const distance = getLocationDistance(
+            latitude,
+            longitude,
+            Number(settings.latitude),
+            Number(settings.longitude),
+          );
+          if (distance > Number(settings.radius)) {
+            setLocationError(
+              `Anda berada ${Math.round(distance)}m dari kantor. Radius: ${settings.radius}m`,
+            );
+            setLoading(false);
+            return;
+          }
+        }
+
+        setShowCameraModal(true);
+        setLoading(false);
+      },
+      (error) => {
+        setLocationError("Gagal mendapatkan lokasi: " + error.message);
+        setLoading(false);
+      },
+    );
   };
 
-  const filteredData = attendanceData.filter((item) => {
-    const matchSearch = item.employeeName
-      ?.toLowerCase()
-      .includes(searchTerm.toLowerCase());
-    const matchStatus = filterStatus === "all" || item.status === filterStatus;
-    return matchSearch && matchStatus;
-  });
+  const handleAttendanceSuccess = async (
+    imageData: string,
+    confidence: number,
+  ) => {
+    if (!currentLocation || !user) return;
 
-  const stats = {
-    total: attendanceData.length,
-    hadir: attendanceData.filter((d) => d.status === "hadir").length,
-    izin: attendanceData.filter((d) => d.status === "izin").length,
-    sakit: attendanceData.filter((d) => d.status === "sakit").length,
-    belumAbsen: attendanceData.filter((d) => !d.checkInTime).length,
+    const now = new Date();
+    const timeString = now.toLocaleTimeString("id-ID", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    const dateString = now.toISOString().split("T")[0];
+    const hour = now.getHours();
+    const isLate = hour > 8;
+
+    await addAttendance({
+      user_id: user.id,
+      date: dateString,
+      check_in_time: attendanceMode === "checkin" ? timeString : undefined,
+      check_out_time: attendanceMode === "checkout" ? timeString : undefined,
+      status:
+        attendanceMode === "checkin"
+          ? isLate
+            ? "terlambat"
+            : "tepat_waktu"
+          : todayAttendance?.status,
+      location: `${currentLocation.latitude.toFixed(4)}, ${currentLocation.longitude.toFixed(4)}`,
+      face_match: confidence,
+    });
+
+    setShowCameraModal(false);
+    setCurrentLocation(null);
+    fetchToday();
   };
 
-  const handleExport = () => {
-    const csv = [
-      ["Nama", "Email", "Jam Masuk", "Jam Keluar", "Status", "Lokasi"],
-      ...filteredData.map((d) => [
-        d.employeeName,
-        d.employeeEmail,
-        d.checkInTime || "-",
-        d.checkOutTime || "-",
-        d.status,
-        d.location || "-",
-      ]),
-    ]
-      .map((row) => row.join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `attendance-${filterDate}.csv`;
-    a.click();
-  };
-
-  return (
-    <div className="flex min-h-screen bg-background dark:bg-background">
-      <Sidebar userRole="admin" currentPage="attendance" />
-      <div className="flex-1">
-        <Topbar userName="Admin Absensi" userRole="Administrator" />
-        <main className="p-4 md:p-6 max-w-7xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-foreground dark:text-foreground">
-              Riwayat Absensi
-            </h1>
-            <p className="text-muted-foreground dark:text-muted-foreground">
-              Monitoring absensi pegawai realtime
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <DarkCard>
+          <div className="p-8 text-center">
+            <AlertCircle className="mx-auto mb-4 text-yellow-600" size={48} />
+            <p className="text-foreground font-medium">
+              Silakan login terlebih dahulu
             </p>
           </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-            {[
-              {
-                label: "Total",
-                value: stats.total,
-                color:
-                  "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400",
-              },
-              {
-                label: "Hadir",
-                value: stats.hadir,
-                color:
-                  "bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400",
-              },
-              {
-                label: "Izin",
-                value: stats.izin,
-                color:
-                  "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400",
-              },
-              {
-                label: "Sakit",
-                value: stats.sakit,
-                color:
-                  "bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400",
-              },
-              {
-                label: "Belum Absen",
-                value: stats.belumAbsen,
-                color:
-                  "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400",
-              },
-            ].map((stat) => (
-              <DarkCard key={stat.label} className={`${stat.color} p-4`}>
-                <p className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                  {stat.label}
-                </p>
-                <p className="text-2xl font-bold mt-2">{stat.value}</p>
-              </DarkCard>
-            ))}
-          </div>
-
-          <DarkCard className="mb-6">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1 relative">
-                <Calendar
-                  size={18}
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground"
-                />
-                <input
-                  type="date"
-                  value={filterDate}
-                  onChange={(e) => setFilterDate(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-border dark:border-border/50 bg-background dark:bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-              <div className="flex-1 relative">
-                <Search
-                  size={18}
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground"
-                />
-                <DarkInput
-                  type="text"
-                  placeholder="Cari nama..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-              <DarkSelect
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-              >
-                <option value="all">Semua Status</option>
-                <option value="hadir">Hadir</option>
-                <option value="izin">Izin</option>
-                <option value="sakit">Sakit</option>
-              </DarkSelect>
-              <DarkButton
-                onClick={handleExport}
-                variant="outline"
-                className="flex items-center gap-2"
-              >
-                <Download size={18} /> Export
-              </DarkButton>
-            </div>
-          </DarkCard>
-
-          <DarkCard>
-            <DarkTable>
-              <DarkTableHead>
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase">
-                    Nama
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase">
-                    Email
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase">
-                    Jam Masuk
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase">
-                    Jam Keluar
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase">
-                    Lokasi
-                  </th>
-                </tr>
-              </DarkTableHead>
-              <DarkTableBody>
-                {loading ? (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-6 py-8 text-center text-muted-foreground"
-                    >
-                      Loading...
-                    </td>
-                  </tr>
-                ) : filteredData.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-6 py-8 text-center text-muted-foreground"
-                    >
-                      Tidak ada data
-                    </td>
-                  </tr>
-                ) : (
-                  filteredData.map((item) => (
-                    <DarkTableRow key={item.id}>
-                      <td className="px-6 py-4 text-sm font-medium">
-                        {item.employeeName}
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        {item.employeeEmail}
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        {item.checkInTime || "-"}
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        {item.checkOutTime || "-"}
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        <DarkBadge
-                          status={
-                            item.status === "hadir"
-                              ? "success"
-                              : item.status === "izin"
-                                ? "info"
-                                : "warning"
-                          }
-                        >
-                          {item.status.charAt(0).toUpperCase() +
-                            item.status.slice(1)}
-                        </DarkBadge>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-muted-foreground">
-                        {item.location || "-"}
-                      </td>
-                    </DarkTableRow>
-                  ))
-                )}
-              </DarkTableBody>
-            </DarkTable>
-          </DarkCard>
-        </main>
+        </DarkCard>
       </div>
-    </div>
+    );
+  }
+
+  return (
+    <>
+      <MobileAttendanceView
+        userName={user.name}
+        status={
+          todayAttendance?.status === "hadir" ||
+          todayAttendance?.status === "tepat_waktu" ||
+          todayAttendance?.status === "terlambat"
+            ? "hadir"
+            : "belum"
+        }
+        checkInTime={todayAttendance?.check_in_time}
+        checkOutTime={todayAttendance?.check_out_time}
+      />
+
+      <div className="hidden md:flex min-h-screen bg-background dark:bg-background">
+        <Sidebar userRole="user" currentPage="absen" />
+        <div className="flex-1">
+          <Topbar
+            userName={user.name}
+            userRole={user.role === "admin" ? "Admin" : "Pengguna"}
+          />
+          <main className="p-4 md:p-6 max-w-4xl mx-auto">
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold text-foreground">
+                Sistem Absensi
+              </h1>
+              <p className="text-muted-foreground">
+                Absensi dengan deteksi wajah dan verifikasi lokasi
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              <DarkCard className="p-6">
+                <h2 className="font-bold text-foreground mb-6 flex items-center gap-2">
+                  <Clock size={20} /> Status Hari Ini
+                </h2>
+                <div className="space-y-4 mb-6">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Jam Masuk
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                        <Clock
+                          size={24}
+                          className="text-blue-600 dark:text-blue-400"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-lg font-bold text-foreground">
+                          {todayAttendance?.check_in_time || "-"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {todayAttendance?.status === "terlambat"
+                            ? "Terlambat"
+                            : todayAttendance?.status === "tepat_waktu"
+                              ? "Tepat Waktu"
+                              : "-"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Jam Keluar
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                        <Clock
+                          size={24}
+                          className="text-green-600 dark:text-green-400"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-lg font-bold text-foreground">
+                          {todayAttendance?.check_out_time || "-"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Belum Absen Keluar
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {locationError && (
+                  <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 text-sm mb-6 flex gap-2">
+                    <AlertCircle size={18} className="flex-shrink-0 mt-0.5" />{" "}
+                    {locationError}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  {!todayAttendance?.check_in_time && (
+                    <DarkButton
+                      onClick={() => {
+                        setAttendanceMode("checkin");
+                        handleGetLocation();
+                      }}
+                      disabled={loading}
+                      className="w-full flex items-center justify-center gap-2"
+                    >
+                      <Camera size={20} />{" "}
+                      {loading ? "Mengambil Lokasi..." : "Absen Masuk"}
+                    </DarkButton>
+                  )}
+                  {todayAttendance?.check_in_time &&
+                    !todayAttendance?.check_out_time && (
+                      <DarkButton
+                        onClick={() => {
+                          setAttendanceMode("checkout");
+                          handleGetLocation();
+                        }}
+                        disabled={loading}
+                        variant="outline"
+                        className="w-full flex items-center justify-center gap-2"
+                      >
+                        <Camera size={20} />{" "}
+                        {loading ? "Mengambil Lokasi..." : "Absen Keluar"}
+                      </DarkButton>
+                    )}
+                </div>
+              </DarkCard>
+
+              <DarkCard className="p-6">
+                <h2 className="font-bold text-foreground mb-6 flex items-center gap-2">
+                  <MapPin size={20} /> Informasi Lokasi
+                </h2>
+                <div className="space-y-4">
+                  <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-900/50">
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Lokasi Kantor
+                    </p>
+                    <p className="text-sm font-medium text-foreground">
+                      {settings?.name || "STMIK El Rahma"}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Koordinat:{" "}
+                      {Number(settings?.latitude || -7.7956).toFixed(4)},{" "}
+                      {Number(settings?.longitude || 110.4038).toFixed(4)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Radius: {settings?.radius || 100}m
+                    </p>
+                  </div>
+                  <div className="p-4 rounded-lg bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-900/50">
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Lokasi Anda
+                    </p>
+                    {currentLocation ? (
+                      <>
+                        <p className="text-sm font-medium text-foreground">
+                          {currentLocation.latitude.toFixed(4)},{" "}
+                          {currentLocation.longitude.toFixed(4)}
+                        </p>
+                        <div className="mt-2 flex items-center gap-2 text-green-600 dark:text-green-400">
+                          <CheckCircle size={16} />
+                          <span className="text-xs">Dalam jangkauan</span>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Aktifkan lokasi untuk melihat posisi
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </DarkCard>
+            </div>
+
+            {showCameraModal && (
+              <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center p-4 z-50">
+                <DarkCard className="w-full max-w-xl max-h-[90vh] overflow-y-auto">
+                  <div className="p-6">
+                    <h2 className="text-xl font-bold text-foreground mb-4">
+                      Deteksi Wajah -{" "}
+                      {attendanceMode === "checkin"
+                        ? "Absen Masuk"
+                        : "Absen Keluar"}
+                    </h2>
+                    <FaceDetectionCamera
+                      onCapture={handleAttendanceSuccess}
+                      onCancel={() => setShowCameraModal(false)}
+                    />
+                  </div>
+                </DarkCard>
+              </div>
+            )}
+          </main>
+        </div>
+      </div>
+    </>
   );
 }
