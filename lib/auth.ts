@@ -11,6 +11,9 @@ export async function hashPassword(password: string) {
 }
 
 export async function comparePassword(password: string, hash: string) {
+  if (!hash || typeof hash !== "string") {
+    return false;
+  }
   return bcryptjs.compare(password, hash);
 }
 

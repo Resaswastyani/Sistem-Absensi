@@ -1,17 +1,18 @@
 // app/api/auth/login/route.ts
 import { NextResponse } from "next/server";
 
-// Use node runtime for bcryptjs compatibility
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
-    // Dynamic import to avoid build issues
     const { sql } = await import("@/lib/db");
     const { comparePassword, createToken } = await import("@/lib/auth");
 
     const body = await request.json();
-    const { email, password } = body;
+
+    // Normalisasi input: hapus spasi & lowercase email
+    const email = (body.email || "").toString().trim().toLowerCase();
+    const password = (body.password || "").toString();
 
     if (!email || !password) {
       return NextResponse.json(
@@ -20,15 +21,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // Query database
+    // Gunakan ILIKE agar case-insensitive (safety)
     const users = await sql`
       SELECT id, name, email, password, role, nip, jabatan, departemen, status, phone, alamat
       FROM users 
-      WHERE email = ${email} 
+      WHERE email ILIKE ${email} 
       LIMIT 1
     `;
 
     if (users.length === 0) {
+      console.log("[LOGIN] User tidak ditemukan:", email);
       return NextResponse.json(
         { error: "Email atau password salah" },
         { status: 401 },
@@ -36,9 +38,25 @@ export async function POST(request: Request) {
     }
 
     const user = users[0];
-    const valid = await comparePassword(password, user.password);
+    const passwordHash = user.password ? user.password.toString() : "";
+
+    if (!passwordHash) {
+      console.log("[LOGIN] User tidak punya password hash:", user.id);
+      return NextResponse.json(
+        { error: "Email atau password salah" },
+        { status: 401 },
+      );
+    }
+
+    let valid = false;
+    try {
+      valid = await comparePassword(password, passwordHash);
+    } catch (err) {
+      console.error("[LOGIN] bcrypt compare error:", err);
+    }
 
     if (!valid) {
+      console.log("[LOGIN] Password tidak cocok untuk user:", user.id);
       return NextResponse.json(
         { error: "Email atau password salah" },
         { status: 401 },
@@ -70,7 +88,7 @@ export async function POST(request: Request) {
 
     response.cookies.set("token", token, {
       httpOnly: true,
-      secure: true,
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: 60 * 60 * 24 * 7,
       path: "/",

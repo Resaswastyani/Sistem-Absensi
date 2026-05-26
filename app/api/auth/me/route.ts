@@ -1,13 +1,13 @@
 // app/api/auth/me/route.ts
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { verifyToken } from "@/lib/auth";
 import { sql } from "@/lib/db";
 
 export async function GET(request: Request) {
   try {
-    // Ambil token dari cookie
-    const cookieHeader = request.headers.get("cookie");
-    const token = cookieHeader?.match(/token=([^;]+)/)?.[1];
+    const cookieStore = cookies();
+    const token = cookieStore.get("token")?.value;
 
     if (!token) {
       return NextResponse.json({ user: null }, { status: 401 });
