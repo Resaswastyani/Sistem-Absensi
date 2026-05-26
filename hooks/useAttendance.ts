@@ -1,75 +1,4 @@
-// 'use client';
-
-// import { useState, useCallback, useEffect } from 'react';
-// import { Attendance } from '@/lib/types';
-// import { attendanceService } from '@/lib/storage';
-
-// export function useAttendance() {
-//   const [attendance, setAttendance] = useState<Attendance[]>([]);
-//   const [loading, setLoading] = useState(true);
-
-//   useEffect(() => {
-//     loadAttendance();
-//   }, []);
-
-//   const loadAttendance = useCallback(() => {
-//     setLoading(true);
-//     try {
-//       const data = attendanceService.getAll();
-//       setAttendance(data);
-//     } catch (error) {
-//       console.error('Error loading attendance:', error);
-//     } finally {
-//       setLoading(false);
-//     }
-//   }, []);
-
-//   const addAttendance = useCallback((data: Omit<Attendance, 'id' | 'createdAt' | 'updatedAt'>) => {
-//     try {
-//       const newRecord = attendanceService.create(data);
-//       setAttendance(prev => [...prev, newRecord]);
-//       return newRecord;
-//     } catch (error) {
-//       console.error('Error creating attendance:', error);
-//       throw error;
-//     }
-//   }, []);
-
-//   const updateAttendance = useCallback((id: string, data: Partial<Attendance>) => {
-//     try {
-//       const updated = attendanceService.update(id, data);
-//       setAttendance(prev => prev.map(att => (att.id === id ? updated : att)));
-//       return updated;
-//     } catch (error) {
-//       console.error('Error updating attendance:', error);
-//       throw error;
-//     }
-//   }, []);
-
-//   const getByEmployee = useCallback((employeeId: string, startDate?: string, endDate?: string) => {
-//     return attendanceService.getByEmployee(employeeId, startDate, endDate);
-//   }, []);
-
-//   const getByDate = useCallback((date: string) => {
-//     return attendanceService.getByDate(date);
-//   }, []);
-
-//   const getTodayByEmployee = useCallback((employeeId: string) => {
-//     return attendanceService.getTodayByEmployee(employeeId);
-//   }, []);
-
-//   return {
-//     attendance,
-//     loading,
-//     loadAttendance,
-//     addAttendance,
-//     updateAttendance,
-//     getByEmployee,
-//     getByDate,
-//     getTodayByEmployee,
-//   };
-// }
-
+// hooks/useAttendance.ts
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -100,16 +29,20 @@ export function useAttendance() {
   const fetchAttendance = useCallback(
     async (params?: Record<string, string>) => {
       try {
+        setLoading(true);
         const query = params ? new URLSearchParams(params).toString() : "";
-        const res = await fetch(`/api/attendance?${query}`, {
+        const res = await fetch(`/api/attendance${query ? "?" + query : ""}`, {
           credentials: "include",
         });
         if (res.ok) {
           const data = await res.json();
-          setAttendance(data.attendance);
+          setAttendance(data.attendance || []);
+        } else {
+          setAttendance([]);
         }
       } catch (error) {
         console.error("Failed to fetch attendance:", error);
+        setAttendance([]);
       } finally {
         setLoading(false);
       }
@@ -118,12 +51,20 @@ export function useAttendance() {
   );
 
   const fetchToday = useCallback(async () => {
-    const res = await fetch("/api/attendance/today", {
-      credentials: "include",
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setTodayAttendance(data.attendance);
+    try {
+      // Use query param instead of /today subpath to avoid route conflict
+      const res = await fetch("/api/attendance?today=true", {
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTodayAttendance(data.attendance || null);
+      } else {
+        setTodayAttendance(null);
+      }
+    } catch (error) {
+      console.error("Failed to fetch today attendance:", error);
+      setTodayAttendance(null);
     }
   }, []);
 

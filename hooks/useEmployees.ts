@@ -1,77 +1,4 @@
-// 'use client';
-
-// import { useState, useCallback, useEffect } from 'react';
-// import { Employee } from '@/lib/types';
-// import { employeeService } from '@/lib/storage';
-
-// export function useEmployees() {
-//   const [employees, setEmployees] = useState<Employee[]>([]);
-//   const [loading, setLoading] = useState(true);
-
-//   // Load employees on mount
-//   useEffect(() => {
-//     loadEmployees();
-//   }, []);
-
-//   const loadEmployees = useCallback(() => {
-//     setLoading(true);
-//     try {
-//       const data = employeeService.getAll();
-//       setEmployees(data);
-//     } catch (error) {
-//       console.error('Error loading employees:', error);
-//     } finally {
-//       setLoading(false);
-//     }
-//   }, []);
-
-//   const addEmployee = useCallback((data: Omit<Employee, 'id' | 'createdAt' | 'updatedAt'>) => {
-//     try {
-//       const newEmployee = employeeService.create(data);
-//       setEmployees(prev => [...prev, newEmployee]);
-//       return newEmployee;
-//     } catch (error) {
-//       console.error('Error creating employee:', error);
-//       throw error;
-//     }
-//   }, []);
-
-//   const updateEmployee = useCallback((id: string, data: Partial<Employee>) => {
-//     try {
-//       const updated = employeeService.update(id, data);
-//       setEmployees(prev => prev.map(emp => (emp.id === id ? updated : emp)));
-//       return updated;
-//     } catch (error) {
-//       console.error('Error updating employee:', error);
-//       throw error;
-//     }
-//   }, []);
-
-//   const deleteEmployee = useCallback((id: string) => {
-//     try {
-//       employeeService.delete(id);
-//       setEmployees(prev => prev.filter(emp => emp.id !== id));
-//     } catch (error) {
-//       console.error('Error deleting employee:', error);
-//       throw error;
-//     }
-//   }, []);
-
-//   const searchEmployees = useCallback((query: string) => {
-//     return employeeService.search(query);
-//   }, []);
-
-//   return {
-//     employees,
-//     loading,
-//     loadEmployees,
-//     addEmployee,
-//     updateEmployee,
-//     deleteEmployee,
-//     searchEmployees,
-//   };
-// }
-
+// hooks/useEmployees.ts
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -98,21 +25,27 @@ export function useEmployees() {
 
   const fetchEmployees = useCallback(async () => {
     try {
+      setLoading(true);
       const res = await fetch("/api/employees", { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
-        setEmployees(data.employees);
+        setEmployees(data.employees || []);
+      } else {
+        setEmployees([]);
       }
     } catch (error) {
       console.error("Failed to fetch employees:", error);
+      setEmployees([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchEmployees();
-  }, [fetchEmployees]);
+    if (user) {
+      fetchEmployees();
+    }
+  }, [user, fetchEmployees]);
 
   const addEmployee = async (data: Omit<Employee, "id" | "created_at">) => {
     const res = await fetch("/api/employees", {
@@ -146,6 +79,7 @@ export function useEmployees() {
   };
 
   const searchEmployees = (term: string) => {
+    if (!term) return employees;
     return employees.filter(
       (e) =>
         e.name.toLowerCase().includes(term.toLowerCase()) ||

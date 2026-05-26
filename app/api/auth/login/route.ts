@@ -9,8 +9,6 @@ export async function POST(request: Request) {
     const { comparePassword, createToken } = await import("@/lib/auth");
 
     const body = await request.json();
-
-    // Normalisasi input: hapus spasi & lowercase email
     const email = (body.email || "").toString().trim().toLowerCase();
     const password = (body.password || "").toString();
 
@@ -21,7 +19,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Gunakan ILIKE agar case-insensitive (safety)
     const users = await sql`
       SELECT id, name, email, password, role, nip, jabatan, departemen, status, phone, alamat
       FROM users 
@@ -30,7 +27,6 @@ export async function POST(request: Request) {
     `;
 
     if (users.length === 0) {
-      console.log("[LOGIN] User tidak ditemukan:", email);
       return NextResponse.json(
         { error: "Email atau password salah" },
         { status: 401 },
@@ -41,7 +37,6 @@ export async function POST(request: Request) {
     const passwordHash = user.password ? user.password.toString() : "";
 
     if (!passwordHash) {
-      console.log("[LOGIN] User tidak punya password hash:", user.id);
       return NextResponse.json(
         { error: "Email atau password salah" },
         { status: 401 },
@@ -56,7 +51,6 @@ export async function POST(request: Request) {
     }
 
     if (!valid) {
-      console.log("[LOGIN] Password tidak cocok untuk user:", user.id);
       return NextResponse.json(
         { error: "Email atau password salah" },
         { status: 401 },
@@ -84,6 +78,15 @@ export async function POST(request: Request) {
         phone: user.phone,
         alamat: user.alamat,
       },
+    });
+
+    // Clear old token first, then set new
+    response.cookies.set("token", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 0,
+      path: "/",
     });
 
     response.cookies.set("token", token, {

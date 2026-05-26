@@ -1,4 +1,4 @@
-// context/auth-context.tsx (tetap)
+// context/auth-context.tsx
 "use client";
 
 import {
@@ -46,12 +46,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await fetch("/api/auth/me", {
         credentials: "include",
         cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache",
+        },
       });
 
       if (res.ok) {
         const data = await res.json();
         setUser(data.user);
+      } else if (res.status === 401 || res.status === 404) {
+        setUser(null);
       } else {
+        console.error("Auth check failed with status:", res.status);
         setUser(null);
       }
     } catch (error) {
@@ -63,6 +69,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (email: string, password: string) => {
+    // Clear any existing state first
+    setUser(null);
+
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -86,12 +95,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await fetch("/api/auth/logout", {
-      method: "POST",
-      credentials: "include",
-    });
-    setUser(null);
-    router.push("/");
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      // Always clear local state even if API fails
+      setUser(null);
+      // Force reload to clear all cached data
+      window.location.href = "/";
+    }
   };
 
   return (

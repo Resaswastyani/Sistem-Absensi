@@ -1,3 +1,4 @@
+// hooks/useRequests.ts
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -21,16 +22,20 @@ export function useRequests() {
 
   const fetchRequests = useCallback(async (params?: Record<string, string>) => {
     try {
+      setLoading(true);
       const query = params ? "?" + new URLSearchParams(params).toString() : "";
       const res = await fetch(`/api/requests${query}`, {
         credentials: "include",
       });
       if (res.ok) {
         const data = await res.json();
-        setRequests(data.requests);
+        setRequests(data.requests || []);
+      } else {
+        setRequests([]);
       }
     } catch (error) {
       console.error("Failed to fetch requests:", error);
+      setRequests([]);
     } finally {
       setLoading(false);
     }

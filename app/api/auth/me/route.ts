@@ -6,7 +6,8 @@ import { sql } from "@/lib/db";
 
 export async function GET(request: Request) {
   try {
-    const cookieStore = cookies();
+    // PERBAIKAN: await cookies() karena return Promise
+    const cookieStore = await cookies();
     const token = cookieStore.get("token")?.value;
 
     if (!token) {
@@ -14,7 +15,7 @@ export async function GET(request: Request) {
     }
 
     const payload = await verifyToken(token);
-    if (!payload) {
+    if (!payload || !payload.id) {
       return NextResponse.json({ user: null }, { status: 401 });
     }
 
@@ -28,8 +29,11 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({ user: users[0] });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Auth me error:", error);
-    return NextResponse.json({ user: null }, { status: 500 });
+    return NextResponse.json(
+      { user: null, error: "Server error" },
+      { status: 500 },
+    );
   }
 }

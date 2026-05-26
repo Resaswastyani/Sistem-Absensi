@@ -31,8 +31,6 @@ export function useSettings() {
       }
 
       const data = await res.json();
-
-      // Handle both { settings: ... } and { setting: ... } for backward compat
       const settingsData = data.settings || data.setting || null;
       setSettings(settingsData);
     } catch (error) {
